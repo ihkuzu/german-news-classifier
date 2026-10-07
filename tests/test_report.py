@@ -1,4 +1,12 @@
-from newsclf.report import Result, format_classes, format_report, load_all, safe_name, save
+from newsclf.report import (
+    Result,
+    format_classes,
+    format_repeats,
+    format_report,
+    load_all,
+    safe_name,
+    save,
+)
 
 GOLD = ["Sport", "Sport", "Web", "Web", "Kultur", "Kultur"]
 
@@ -61,3 +69,24 @@ def test_classes_table_lists_mistakes_and_missing_labels():
     assert "| Sport | 1.00 | 0.50 | 0.67 | 2 |" in text
     assert "Sport -> Web: 1" in text
     assert "no valid label returned: 1" in text
+
+
+def test_repeats_summarise_runs_of_the_same_method():
+    def run(name, method, wrong):
+        predictions = ["Etat"] * wrong + GOLD[wrong:]
+        return Result(name=name, method=method, gold=GOLD, predictions=predictions)
+
+    results = [run("a1", "bert", 0), run("a2", "bert", 3), run("b", "svm", 1)]
+    text = format_repeats(results)
+    # accuracies 1.0 and 0.5: mean 0.75, sample std 0.354
+    assert "| bert | 2 | 0.750 | 0.354 | 0.500 | 1.000 |" in text
+    assert "svm" not in text
+
+
+def test_repeats_are_empty_without_repeated_runs():
+    assert format_repeats([full("a", GOLD), full("b", GOLD)]) == ""
+
+
+def test_repeats_ignore_runs_on_a_sample():
+    partial = Result(name="p", method="x", gold=["Sport"], predictions=["Sport"], indices=[0])
+    assert format_repeats([partial, partial]) == ""

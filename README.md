@@ -155,7 +155,7 @@ pip install -e ".[dev]"
 pytest -q
 ```
 
-53 tests. They need neither the dataset nor a model download: the CSV reader, the
+56 tests. They need neither the dataset nor a model download: the CSV reader, the
 metrics (checked against values worked out by hand), the baseline on a toy corpus,
 the Ollama client against mocked HTTP responses, the report and the command line.
 The fine-tuning loop is tested by training a tiny, randomly initialised BERT on a toy

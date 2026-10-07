@@ -89,6 +89,34 @@ def format_report(results: list[Result]) -> str:
     return "\n".join(lines)
 
 
+def format_repeats(results: list[Result]) -> str:
+    # runs of the same method that differ only in their seed
+    groups: dict[str, list[Result]] = {}
+    for result in results:
+        if result.indices is None:
+            groups.setdefault(result.method, []).append(result)
+    lines = []
+    for method, runs in groups.items():
+        if len(runs) < 2:
+            continue
+        scores = [accuracy(r.gold, r.predictions) for r in runs]
+        mean = sum(scores) / len(scores)
+        spread = (sum((s - mean) ** 2 for s in scores) / (len(scores) - 1)) ** 0.5
+        lines.append(
+            f"| {method} | {len(runs)} | {mean:.3f} | {spread:.3f} "
+            f"| {min(scores):.3f} | {max(scores):.3f} |"
+        )
+    if not lines:
+        return ""
+    header = [
+        "Repeated runs",
+        "",
+        "| method | runs | mean accuracy | std | min | max |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    return "\n".join(header + lines)
+
+
 def format_classes(result: Result) -> str:
     scores = per_class(result.gold, result.predictions, LABELS)
     lines = [

@@ -147,6 +147,9 @@ def cmd_llm(args) -> int:
 def cmd_report(args) -> int:
     results = report.load_all(args.results)
     print(report.format_report(results))
+    repeats = report.format_repeats(results)
+    if repeats:
+        print(f"\n{repeats}")
     for result in results:
         print(f"\n{result.name}: {result.method}\n")
         print(report.format_classes(result))
