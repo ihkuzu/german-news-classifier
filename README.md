@@ -26,19 +26,46 @@ The data is licensed CC BY-NC-SA 4.0 and is not part of this repository.
 
 ## Results
 
+Measured on one desktop PC (RTX 2060 with 6 GB, one run per method).
+
 Full test set (1,028 articles):
 
-| method | accuracy | macro F1 |
-| --- | --- | --- |
-| TF-IDF + linear SVM | 0.887 | 0.892 |
+| method | accuracy | macro F1 | training | per article |
+| --- | --- | --- | --- | --- |
+| TF-IDF + linear SVM | 0.887 | 0.892 | 4 s (CPU) | 0.3 ms |
+| fine-tuned gbert-base | 0.907 | 0.901 | 442 s (GPU) | 4.5 ms |
 
-The fine-tuned model and the LLM are not measured yet, see the roadmap.
+The same 301 test articles for all three (the LLM is too slow for the full set):
 
-Per section, the baseline is nearly perfect on Sport (F1 0.98) and weakest on
-Panorama (F1 0.83). Panorama is the newspaper's catch-all section for society, crime
-and accidents, and four of the five most frequent mistakes involve it, mostly mixed
-up with International, Inland and Wirtschaft. Run `python -m newsclf report` for the
-full table.
+| method | accuracy | macro F1 | per article |
+| --- | --- | --- | --- |
+| TF-IDF + linear SVM | 0.894 | 0.900 | 0.3 ms |
+| fine-tuned gbert-base | 0.920 | 0.913 | 4.5 ms |
+| zero-shot llama3.2:3b | 0.482 | 0.493 | 481 ms |
+
+What I take from this:
+
+- **Fine-tuning wins, but by two points.** BERT gets 932 articles right, the baseline
+  912. It costs about 100 times the training time, a GPU and 15 times the time per
+  article. Whether that is worth it depends on what a wrong label costs.
+- **The gap is at the edge of what this test set can show.** BERT is right on 59
+  articles where the baseline is wrong, the baseline on 39 where BERT is wrong (sign
+  test p = 0.054). With a single training run I would not call that settled.
+- **The comparison slightly favours the baseline.** It is trained on all 9,245
+  training articles, while BERT gives up 924 of them as its dev split.
+- **A small general model with a prompt is far behind.** It labels almost half of the
+  articles wrongly and is the slowest by a wide margin. Its favourite mistake is
+  Inland: precision 0.31 there, because articles from Panorama, International and
+  Wirtschaft get filed under domestic politics. The section names follow one
+  newspaper's habits, which a prompt cannot learn from nine one-line descriptions.
+- **Where the methods differ.** BERT is clearly better on Web (F1 0.98 against 0.91)
+  and Wirtschaft (0.90 against 0.86). The baseline is better on Kultur (0.90 against
+  0.85) and Wissenschaft (0.94 against 0.91), the two smallest sections. Both share
+  the same top mistake, International filed under Panorama, 12 times each.
+
+BERT's dev accuracy went 0.856, 0.895, 0.897 over the three epochs, so more epochs
+would probably add little. Every number above comes from the files in `results/`,
+and `python -m newsclf report` prints the full per-section tables.
 
 ## How the comparison is kept fair
 
@@ -84,7 +111,7 @@ python -m newsclf baseline
 python -m newsclf predict "Die Europäische Zentralbank senkt den Leitzins."
 ```
 
-Fine-tuning needs PyTorch and a GPU. The default settings are chosen for a 6 GB card:
+Fine-tuning needs PyTorch and a GPU. The default settings ran on a 6 GB card:
 
 ```bash
 pip install -e ".[train]"
@@ -148,8 +175,9 @@ runs them in a separate job.
 - [x] Dataset download, fixed train/test split
 - [x] TF-IDF baseline, settings chosen on a dev split
 - [x] Fine-tuning and zero-shot code with tests
-- [ ] Measure the fine-tuned German BERT
-- [ ] Measure the zero-shot LLM on a test sample
+- [x] Measure the fine-tuned German BERT
+- [x] Measure the zero-shot LLM on a test sample
+- [ ] Few-shot prompt and a larger LLM
 - [ ] Compare a multilingual BERT with the German one
 - [ ] Repeat the fine-tuning with several seeds
 
