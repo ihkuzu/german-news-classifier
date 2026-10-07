@@ -26,16 +26,30 @@ The data is licensed CC BY-NC-SA 4.0 and is not part of this repository.
 
 ## Results
 
-Measured on one desktop PC (RTX 2060 with 6 GB, one run per method).
+Measured on one desktop PC (RTX 2060 with 6 GB).
 
 Full test set (1,028 articles):
 
 | method | accuracy | macro F1 | training | per article |
 | --- | --- | --- | --- | --- |
 | TF-IDF + linear SVM | 0.887 | 0.892 | 4 s (CPU) | 0.3 ms |
-| fine-tuned gbert-base | 0.907 | 0.901 | 442 s (GPU) | 4.5 ms |
+| fine-tuned multilingual BERT, 1 run | 0.893 | 0.890 | 511 s (GPU) | 4.9 ms |
+| fine-tuned gbert-base, mean of 4 runs | 0.907 | 0.901 | about 415 s (GPU) | 4.5 ms |
 
-The same 301 test articles for all three (the LLM is too slow for the full set):
+The four gbert-base runs differ in their seed, which changes both the model's starting
+point and which training articles are held out as the dev split:
+
+| seed | accuracy | macro F1 |
+| --- | --- | --- |
+| 13 | 0.907 | 0.901 |
+| 1 | 0.914 | 0.910 |
+| 2 | 0.896 | 0.889 |
+| 3 | 0.911 | 0.906 |
+
+Mean 0.907, standard deviation 0.008.
+
+The same 301 test articles for all three approaches (the LLM is too slow for the full
+set, BERT is the seed 13 run):
 
 | method | accuracy | macro F1 | per article |
 | --- | --- | --- | --- |
@@ -45,27 +59,33 @@ The same 301 test articles for all three (the LLM is too slow for the full set):
 
 What I take from this:
 
-- **Fine-tuning wins, but by two points.** BERT gets 932 articles right, the baseline
-  912. It costs about 100 times the training time, a GPU and 15 times the time per
-  article. Whether that is worth it depends on what a wrong label costs.
-- **The gap is at the edge of what this test set can show.** BERT is right on 59
-  articles where the baseline is wrong, the baseline on 39 where BERT is wrong (sign
-  test p = 0.054). With a single training run I would not call that settled.
+- **Fine-tuning the German model wins, by about two points.** All four runs beat the
+  baseline on accuracy, by 0.9 to 2.7 points. It costs about 100 times the training
+  time, a GPU and 15 times the time per article. Whether that is worth it depends on
+  what a wrong label costs.
+- **One run would have been misleading in either direction.** The runs spread over 1.8
+  points. Compared article by article with the baseline (sign test), two runs are
+  clearly better (p = 0.005 and 0.015), one is borderline (p = 0.054) and one is not
+  distinguishable (p = 0.44). On macro F1 the weakest run is even slightly below the
+  baseline (0.889 against 0.892).
+- **The German model matters.** Multilingual BERT reaches 0.893 in its one run, 1.4
+  points under the gbert-base mean and not distinguishable from the baseline
+  (p = 0.64). It was also slower to train.
 - **The comparison slightly favours the baseline.** It is trained on all 9,245
-  training articles, while BERT gives up 924 of them as its dev split.
-- **A small general model with a prompt is far behind.** It labels almost half of the
-  articles wrongly and is the slowest by a wide margin. Its favourite mistake is
+  training articles, while the BERT runs give up 924 of them as their dev split.
+- **A small general model with a prompt is far behind.** It labels just over half of
+  the articles wrongly and is the slowest by a wide margin. Its favourite mistake is
   Inland: precision 0.31 there, because articles from Panorama, International and
   Wirtschaft get filed under domestic politics. The section names follow one
   newspaper's habits, which a prompt cannot learn from nine one-line descriptions.
-- **Where the methods differ.** BERT is clearly better on Web (F1 0.98 against 0.91)
-  and Wirtschaft (0.90 against 0.86). The baseline is better on Kultur (0.90 against
-  0.85) and Wissenschaft (0.94 against 0.91), the two smallest sections. Both share
-  the same top mistake, International filed under Panorama, 12 times each.
+- **Where the methods differ** (seed 13 run). BERT is clearly better on Web (F1 0.98
+  against 0.91) and Wirtschaft (0.90 against 0.86). The baseline is better on Kultur
+  (0.90 against 0.85) and Wissenschaft (0.94 against 0.91), the two smallest
+  sections. Both share the same top mistake, International filed under Panorama, 12
+  times each.
 
-BERT's dev accuracy went 0.856, 0.895, 0.897 over the three epochs, so more epochs
-would probably add little. Every number above comes from the files in `results/`,
-and `python -m newsclf report` prints the full per-section tables.
+Every number above comes from the files in `results/`, and
+`python -m newsclf report` prints the full tables.
 
 ## How the comparison is kept fair
 
@@ -116,7 +136,8 @@ Fine-tuning needs PyTorch and a GPU. The default settings ran on a 6 GB card:
 ```bash
 pip install -e ".[train]"
 python -m newsclf finetune                      # deepset/gbert-base, 3 epochs
-python -m newsclf finetune --model distilbert-base-german-cased
+python -m newsclf finetune --model bert-base-multilingual-cased --name mbert
+python -m newsclf finetune --seed 1 --name gbert-base-seed1
 ```
 
 The zero-shot run needs [Ollama](https://ollama.com) with a model pulled:
@@ -166,7 +187,7 @@ runs them in a separate job.
 
 - One dataset from one newspaper. Section labels reflect that paper's editorial
   habits, so the numbers say little about other sources.
-- One training run per model, no repeats with different seeds yet.
+- Four runs for gbert-base, but only one for multilingual BERT and for the LLM.
 - The section an article was published in is not always the only reasonable label,
   which puts a ceiling on accuracy for every method.
 
@@ -178,8 +199,8 @@ runs them in a separate job.
 - [x] Measure the fine-tuned German BERT
 - [x] Measure the zero-shot LLM on a test sample
 - [ ] Few-shot prompt and a larger LLM
-- [ ] Compare a multilingual BERT with the German one
-- [ ] Repeat the fine-tuning with several seeds
+- [x] Compare a multilingual BERT with the German one
+- [x] Repeat the fine-tuning with several seeds
 
 ## License
 
