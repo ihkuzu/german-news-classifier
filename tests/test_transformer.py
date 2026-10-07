@@ -95,3 +95,27 @@ def test_tokenizer_falls_back_to_the_vocab_file(tmp_path, monkeypatch):
     # cased, and umlauts are not stripped
     assert tokenizer.tokenize("Größe zeigte") == ["Größe", "zeigt", "##e"]
     assert tokenizer.tokenize("größe") == ["[UNK]"]
+
+
+def test_model_without_model_type_is_loaded_as_bert(tmp_path, tiny_bert):
+    import json
+    import shutil
+
+    folder = tmp_path / "old-style"
+    shutil.copytree(tiny_bert, folder)
+    config = json.loads((folder / "config.json").read_text(encoding="utf-8"))
+    del config["model_type"]
+    (folder / "config.json").write_text(json.dumps(config), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="model_type"):
+        transformers.AutoModelForSequenceClassification.from_pretrained(folder)
+    model = transformer._load_model(folder, num_labels=len(LABELS))
+    assert model.config.model_type == "bert"
+    assert model.config.num_labels == len(LABELS)
+
+    train, dev = split_dev(make_examples(per_label=4), fraction=0.25)
+    out = tmp_path / "out"
+    transformer.finetune(train, dev, out, model_name=str(folder), epochs=1, batch_size=8, max_length=32)
+    # the saved copy has the model type, so it loads the normal way
+    assert json.loads((out / "config.json").read_text(encoding="utf-8"))["model_type"] == "bert"
+    assert len(transformer.predict(out, [e.text for e in dev], max_length=32)) == len(dev)

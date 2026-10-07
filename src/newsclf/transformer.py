@@ -36,6 +36,18 @@ def _load_tokenizer(model_name: str | Path):
         )
 
 
+def _load_model(model_name: str | Path, **kwargs):
+    from transformers import AutoModelForSequenceClassification
+
+    try:
+        return AutoModelForSequenceClassification.from_pretrained(model_name, **kwargs)
+    except ValueError:
+        # the same older repos have no model_type in config.json
+        from transformers import BertForSequenceClassification
+
+        return BertForSequenceClassification.from_pretrained(model_name, **kwargs)
+
+
 def _batches(items: list, size: int):
     for start in range(0, len(items), size):
         yield items[start : start + size]
@@ -82,7 +94,7 @@ def finetune(
     on_epoch=None,
 ) -> list[dict]:
     import torch
-    from transformers import AutoModelForSequenceClassification, get_linear_schedule_with_warmup
+    from transformers import get_linear_schedule_with_warmup
 
     random.seed(seed)
     torch.manual_seed(seed)
@@ -90,7 +102,7 @@ def finetune(
     label_ids = {label: i for i, label in enumerate(LABELS)}
 
     tokenizer = _load_tokenizer(model_name)
-    model = AutoModelForSequenceClassification.from_pretrained(
+    model = _load_model(
         model_name,
         num_labels=len(LABELS),
         id2label=dict(enumerate(LABELS)),
@@ -148,10 +160,8 @@ def finetune(
 def predict(
     model_dir: str | Path, texts: list[str], batch_size: int = 32, max_length: int = 256
 ) -> list[str]:
-    from transformers import AutoModelForSequenceClassification
-
     device = _device()
     tokenizer = _load_tokenizer(model_dir)
-    model = AutoModelForSequenceClassification.from_pretrained(model_dir).to(device)
+    model = _load_model(model_dir).to(device)
     ids = _predict_ids(model, tokenizer, texts, batch_size, max_length, device)
     return [model.config.id2label[i] for i in ids]
