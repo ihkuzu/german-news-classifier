@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import random
 import time
 from pathlib import Path
@@ -14,6 +15,25 @@ def _device():
     import torch
 
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+def _load_tokenizer(model_name: str | Path):
+    from transformers import AutoTokenizer
+
+    try:
+        return AutoTokenizer.from_pretrained(model_name)
+    except ValueError:
+        # some older BERT repos ship only vocab.txt, which the auto class can miss
+        from huggingface_hub import hf_hub_download
+        from transformers import BertTokenizerFast
+
+        config_path = hf_hub_download(str(model_name), "tokenizer_config.json")
+        settings = json.loads(Path(config_path).read_text(encoding="utf-8"))
+        return BertTokenizerFast(
+            hf_hub_download(str(model_name), "vocab.txt"),
+            do_lower_case=settings.get("do_lower_case", True),
+            strip_accents=settings.get("strip_accents"),
+        )
 
 
 def _batches(items: list, size: int):
@@ -62,18 +82,14 @@ def finetune(
     on_epoch=None,
 ) -> list[dict]:
     import torch
-    from transformers import (
-        AutoModelForSequenceClassification,
-        AutoTokenizer,
-        get_linear_schedule_with_warmup,
-    )
+    from transformers import AutoModelForSequenceClassification, get_linear_schedule_with_warmup
 
     random.seed(seed)
     torch.manual_seed(seed)
     device = _device()
     label_ids = {label: i for i, label in enumerate(LABELS)}
 
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    tokenizer = _load_tokenizer(model_name)
     model = AutoModelForSequenceClassification.from_pretrained(
         model_name,
         num_labels=len(LABELS),
@@ -132,10 +148,10 @@ def finetune(
 def predict(
     model_dir: str | Path, texts: list[str], batch_size: int = 32, max_length: int = 256
 ) -> list[str]:
-    from transformers import AutoModelForSequenceClassification, AutoTokenizer
+    from transformers import AutoModelForSequenceClassification
 
     device = _device()
-    tokenizer = AutoTokenizer.from_pretrained(model_dir)
+    tokenizer = _load_tokenizer(model_dir)
     model = AutoModelForSequenceClassification.from_pretrained(model_dir).to(device)
     ids = _predict_ids(model, tokenizer, texts, batch_size, max_length, device)
     return [model.config.id2label[i] for i in ids]

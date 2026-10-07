@@ -71,3 +71,27 @@ def test_prediction_order_does_not_depend_on_text_length(trained):
     together = transformer.predict(folder, mixed, batch_size=2, max_length=32)
     assert together == [dev[0].label, dev[-1].label, dev[4].label]
     assert len(set(together)) == 3
+
+
+def test_tokenizer_falls_back_to_the_vocab_file(tmp_path, monkeypatch):
+    import huggingface_hub
+
+    (tmp_path / "vocab.txt").write_text(
+        "\n".join(["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]", "Größe", "zeigt", "##e"]) + "\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "tokenizer_config.json").write_text(
+        '{"do_lower_case": false, "strip_accents": false}', encoding="utf-8"
+    )
+
+    def broken(name):
+        raise ValueError("Couldn't instantiate the backend tokenizer")
+
+    monkeypatch.setattr(transformers.AutoTokenizer, "from_pretrained", broken)
+    monkeypatch.setattr(
+        huggingface_hub, "hf_hub_download", lambda repo, filename: str(tmp_path / filename)
+    )
+    tokenizer = transformer._load_tokenizer("some/model")
+    # cased, and umlauts are not stripped
+    assert tokenizer.tokenize("Größe zeigte") == ["Größe", "zeigt", "##e"]
+    assert tokenizer.tokenize("größe") == ["[UNK]"]
